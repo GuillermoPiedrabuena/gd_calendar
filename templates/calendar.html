@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calendario</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        .calendar {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .calendar {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .day {
+            border: 1px solid black;
+            padding: 10px;
+            background-color: #f9f9f9;
+        }
+
+        .day h3 {
+            margin: 0;
+            text-align: center;
+            background-color: #f0f0f0;
+            padding: 5px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            border: 1px solid black;
+            text-align: center;
+            vertical-align: top;
+            padding: 5px;
+        }
+
+        .editable {
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .highlight {
+            background-color: blue;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <h1>Calendario de {{ month_name }} {{ year }}</h1>
+    <form id="schedule-form">
+        <div class="calendar">
+            {% for week_number, week_value in schedule.items() %}
+                {% for day in week_value %}
+                    <div class="day">
+                        {% if day.day %}
+                            <h3 id="{{day.day}}">{{day.data[0].weekday}} {{ day.day }}</h3>
+                            <table>
+                                <tbody>
+                                    {% for hour in day.data %}
+                                        <tr>
+                                            <td class="time-cell {% if hour.occupied.strip() != '' %}highlight{% endif %}">
+                                                {{ hour.time }}
+                                            </td>
+                                            <td>
+                                                <input 
+                                                    type="text" 
+                                                    onchange="update(this, {{ week_number }}, {{ day }}, {{ hour }} )"
+                                                    name="schedule[{{ day.day }}][{{ hour.time }}]" 
+                                                    value="{{ hour.occupied }}" 
+                                                    class="editable"
+                                                >
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        {% else %}
+                            <div class="empty-day"></div>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            {% endfor %}
+        </div>
+    </form>
+
+    <script>
+
+function updateDayOfWeek(day, month, year = new Date().getFullYear(), elementId) {
+    /**
+     * Calcula el día de la semana para una fecha específica y actualiza el contenido de un elemento HTML.
+     *
+     * @param {number} day - Día del mes.
+     * @param {number} month - Mes del año (1-12).
+     * @param {number} year - Año (opcional, por defecto el actual).
+     * @param {string} elementId - ID del elemento HTML a actualizar.
+     */
+
+    // Crear un objeto Date con el día, mes y año proporcionados
+    const date = new Date(year, month - 1, day); // Meses en JavaScript son 0-indexados
+
+    // Array con los nombres de los días de la semana
+    const weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+    // Obtener el día de la semana como número (0 para Sunday, 6 para Saturday)
+    const dayOfWeek = date.getDay();
+
+    // Buscar el elemento por su ID
+    const element = document.getElementById(day);
+
+    // Actualizar el texto del elemento con el nombre del día de la semana
+    if (element) {
+        element.innerText = weekdays[dayOfWeek];
+    } else {
+        console.error(`Elemento con ID "${elementId}" no encontrado.`);
+    }
+}
+
+        async function update(input, week_number, day, hour) {
+            const {time} = hour;
+            const value = input.value;
+            day = day.day;
+
+            // Encuentra la celda anterior (la que contiene la hora)
+            const timeCell = input.closest('tr').querySelector('.time-cell');
+            if (input.value.trim() !== "") {
+                // Si el valor no está vacío, agrega la clase 'highlight'
+                timeCell.classList.add('highlight');
+            } else {
+                // Si está vacío, elimina la clase 'highlight'
+                timeCell.classList.remove('highlight');
+            }
+
+            const data = {
+                week_number, day, time, value
+            };
+
+            try {
+                const response = await fetch('/update-schedule', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                if (response.ok) {
+                    // alert('Horario actualizado correctamente.');
+                } else {
+                    alert('Hubo un error al actualizar el horario.');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error al comunicarse con el servidor.');
+            }
+        }
+    </script>
+</body>
+</html>
