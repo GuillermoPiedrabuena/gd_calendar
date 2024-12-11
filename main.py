@@ -1,10 +1,12 @@
 from fastapi import FastAPI, Request, Body
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from datetime import datetime
+from datetime import datetime, timedelta
 import calendar
 from collections import defaultdict
 from fastapi.responses import JSONResponse
+import threading
+import time
 
 app = FastAPI()
 
@@ -13,42 +15,63 @@ templates = Jinja2Templates(directory="templates")
 
 # Variable global para el horario
 schedule = {}
+lock = threading.Lock()  # Para manejar accesos concurrentes a la variable `schedule`
 
-def create_monthly_schedule(start_hour=8, end_hour=18):
+def create_monthly_schedule(start_date, days=30, start_hour=8, end_hour=19):
     """
-    Crea un horario desde el día de hoy hasta el último día del mes actual.
-
-    Args:
-        start_hour (int): Hora de inicio del horario (formato 24 horas, default es 8).
-        end_hour (int): Hora de fin del horario (formato 24 horas, default es 18).
-
-    Returns:
-        list: Lista de diccionarios donde cada diccionario representa un intervalo horario.
+    Crea un horario desde una fecha inicial por una cantidad específica de días,
+    con intervalos de 30 minutos.
     """
-    # Obtener la fecha actual y los datos del mes
-    current_date = datetime.now()
-    year, month = current_date.year, current_date.month
-    start_day = current_date.day  # Comienza desde hoy
-    days_in_month = calendar.monthrange(year, month)[1]  # Total de días en el mes
-
-    # Inicializar la lista
     schedule = []
 
-    # Generar horarios desde el día actual hasta el último día del mes
-    for day in range(start_day, days_in_month + 1):
+    for day_offset in range(days):
+        current_date = start_date + timedelta(days=day_offset)
+        year, month, day = current_date.year, current_date.month, current_date.day
         weekday = calendar.weekday(year, month, day)
         weekday_name = calendar.day_name[weekday]
-        schedule.extend([
-            {
-                "occupied": "",
-                "weekday": weekday_name,
-                "time": f"{hour:02d}:00",
-                "day": day
-            }
-            for hour in range(start_hour, end_hour)
-        ])
+        month_name = calendar.month_name[month]  # Nombre del mes en inglés
+        
+        translation_dict = {
+            # Días de la semana
+            "Monday": "Lunes",
+            "Tuesday": "Martes",
+            "Wednesday": "Miércoles",
+            "Thursday": "Jueves",
+            "Friday": "Viernes",
+            "Saturday": "Sábado",
+            "Sunday": "Domingo",
+            
+            # Meses del año
+            "January": "Enero",
+            "February": "Febrero",
+            "March": "Marzo",
+            "April": "Abril",
+            "May": "Mayo",
+            "June": "Junio",
+            "July": "Julio",
+            "August": "Agosto",
+            "September": "Septiembre",
+            "October": "Octubre",
+            "November": "Noviembre",
+            "December": "Diciembre",
+        }
 
+        # Generar intervalos de 30 minutos para cada día
+        for hour in range(start_hour, end_hour):
+            for minute in (0, 30):  # Intervalos de 30 minutos
+                time_slot = f"{hour:02d}:{minute:02d}"
+                schedule.append({
+                    "occupied": "",
+                    "weekday": translation_dict[weekday_name],
+                    "time": time_slot,
+                    "day": day,
+                    "month": month,
+                    "month_name": translation_dict[month_name],
+                    "year": year,
+                })
+    
     return schedule
+
 def group_by_day(schedule):
     grouped = defaultdict(list)
     for entry in schedule:
@@ -57,23 +80,48 @@ def group_by_day(schedule):
     return dict(grouped)
 
 def group_by_week(grouped_by_day):
+    """
+    Agrupa los días en semanas basándose en su número de semana.
+    """
     weeks = defaultdict(list)
-    for day in sorted(grouped_by_day.keys()):
-        week_number = (day - 1) // 7 + 1
+    for day, entries in grouped_by_day.items():
+        # Obtener la fecha completa del primer entry para calcular el número de semana
+        first_entry = entries[0]
+        current_date = datetime(first_entry["year"], first_entry["month"], first_entry["day"])
+        week_number = (current_date.day - 1) // 7 + 1
         weeks[week_number].append({
-            "day": day,
-            "data": grouped_by_day[day]
+            "day": first_entry["day"],
+            "data": entries
         })
     return dict(weeks)
+
+def schedule_updater():
+    """
+    Función en un hilo paralelo para actualizar el horario cada día.
+    """
+    global schedule
+    while True:
+        time.sleep(24 * 60 * 60)  # Esperar un día completo (24 horas)
+        with lock:
+            today = datetime.now()
+            new_schedule = create_monthly_schedule(today, days=30)
+            grouped_by_day = group_by_day(new_schedule)
+            schedule = group_by_week(grouped_by_day)
 
 @app.on_event("startup")
 async def initialize_schedule():
     """
-    Inicializa el horario global cuando el servidor inicia.
+    Inicializa el horario global y lanza el hilo de actualización diaria.
     """
     global schedule
-    monthly_schedule = create_monthly_schedule()
-    schedule = group_by_week(group_by_day(monthly_schedule))
+    today = datetime.now()
+    monthly_schedule = create_monthly_schedule(today, days=30)
+    grouped_by_day = group_by_day(monthly_schedule)
+    schedule = group_by_week(grouped_by_day)
+    
+    # Lanzar el hilo para actualizar el horario
+    updater_thread = threading.Thread(target=schedule_updater, daemon=True)
+    updater_thread.start()
 
 @app.get("/", response_class=HTMLResponse)
 async def ver_calendario(request: Request):
@@ -109,40 +157,31 @@ async def update_schedule(
 ):
     """
     Actualiza el campo `occupied` del horario global `schedule` con el valor proporcionado.
-    Los parámetros incluyen:
-    - value: Nuevo valor para el campo `occupied`.
-    - week_number: Número de la semana.
-    - day: Día del mes.
-    - time: Hora específica.
     """
+    with lock:
+        if week_number not in schedule:
+            return JSONResponse(
+                content={"error": f"La semana {week_number} no existe en el horario."},
+                status_code=400
+            )
 
-    # Validar si week_number existe en schedule
-    if week_number not in schedule:
-        return JSONResponse(
-            content={"error": f"La semana {week_number} no existe en el horario."},
-            status_code=400
-        )
+        week_data = schedule[week_number]
+        day_entry = next((entry for entry in week_data if entry["day"] == day), None)
 
-    # Buscar el día en la semana
-    week_data = schedule[week_number]
-    day_entry = next((entry for entry in week_data if entry["day"] == day), None)
+        if not day_entry:
+            return JSONResponse(
+                content={"error": f"El día {day} no existe en la semana {week_number}."},
+                status_code=400
+            )
 
-    if not day_entry:
-        return JSONResponse(
-            content={"error": f"El día {day} no existe en la semana {week_number}."},
-            status_code=400
-        )
+        hour_entry = next((hour for hour in day_entry["data"] if hour["time"] == time), None)
 
-    # Buscar la entrada de tiempo específica
-    hour_entry = next((hour for hour in day_entry["data"] if hour["time"] == time), None)
+        if not hour_entry:
+            return JSONResponse(
+                content={"error": f"La hora {time} no existe para el día {day} en la semana {week_number}."},
+                status_code=400
+            )
 
-    if not hour_entry:
-        return JSONResponse(
-            content={"error": f"La hora {time} no existe para el día {day} en la semana {week_number}."},
-            status_code=400
-        )
-
-    # Actualizar el campo `occupied` con el valor proporcionado
-    hour_entry["occupied"] = value
+        hour_entry["occupied"] = value
 
     return JSONResponse(content={"message": "Horario actualizado con éxito.", "schedule": schedule})

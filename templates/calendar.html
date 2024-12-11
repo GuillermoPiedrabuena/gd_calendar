@@ -3,20 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Calendario</title>
+    <link rel="icon" href="https://defensadeudores.cl/hubfs/favico_defensa_deudores.webp" type="image/x-icon">
+    <title>Calendario Audiencias GD</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Roboto', Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: white; /* Baby Blue */
+            color: #0c2d48; /* Dark Blue */
         }
 
         h1 {
             text-align: center;
+            margin: 20px 0;
+            font-size: min(10vw, 2.5em);
+            color: #145da0; /* Midnight Blue */
         }
 
         .calendar {
             display: grid;
             grid-template-columns: repeat(7, 1fr);
             gap: 10px;
+            padding: 20px;
+            max-width: 95vw;
+            margin: auto;
         }
 
         @media (max-width: 768px) {
@@ -26,50 +37,106 @@
         }
 
         .day {
-            border: 1px solid black;
+            border: 2px solid #0c2d48; /* Dark Blue */
             padding: 10px;
-            background-color: #f9f9f9;
+            padding-top: 0px;
+            background-color: #e8f6fc; /* Lighter Blue for contrast */
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            max-height: 50vh; /* Set maximum height to 50% of the viewport */
+            overflow-y: auto; /* Enable vertical scrolling */
+            scroll-behavior: smooth; /* Smooth scrolling for better UX */
+        }
+
+        .day::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .day::-webkit-scrollbar-thumb {
+            background-color: #145da0; /* Midnight Blue */
+            border-radius: 5px;
+        }
+
+        .day::-webkit-scrollbar-track {
+            background-color: #e8f6fc; /* Match the day box background */
         }
 
         .day h3 {
-            margin: 0;
+            margin: 0 0 10px 0;
             text-align: center;
-            background-color: #f0f0f0;
-            padding: 5px;
+            background-color: #2e8bc0; /* Blue */
+            color: white;
+            padding: 10px;
+            border-bottom-left-radius: 5px;
+            border-bottom-right-radius: 5px;
+            border-top-right-radius: 0px;
+            border-top-left-radius: 0px;
+            font-size: 1.2em;
+            position: sticky; /* Keeps the header fixed at the top */
+            top: 0;
+            z-index: 1;
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
+            background-color: white;
+            border-radius: 5px;
+            overflow: hidden;
         }
 
         th, td {
-            border: 1px solid black;
+            border: 1px solid #145da0; /* Midnight Blue */
             text-align: center;
             vertical-align: top;
-            padding: 5px;
+            padding: 8px;
+            font-size: 0.9em;
         }
 
         .editable {
-            width: 100%;
+            width: 95%;
+            padding: 5px;
             box-sizing: border-box;
+            border: 1px solid #b1d4e0;
+            border-radius: 3px;
+            outline: none;
+            font-size: 0.9em;
+        }
+
+        .editable:focus {
+            border-color: #145da0;
+            box-shadow: 0 0 5px rgba(20, 93, 160, 0.5);
         }
 
         .highlight {
-            background-color: blue;
+            background-color: #145da0; /* Midnight Blue */
             color: white;
+        }
+
+        .empty-day {
+            height: 60px; /* Placeholder for empty days */
+        }
+        .logo{
+            width: max(6vw, 100px);
         }
     </style>
 </head>
 <body>
-    <h1>Calendario de {{ month_name }} {{ year }}</h1>
+    <div
+        style="display: flex; justify-content: center; align-items: center; margin-top: 10px;"
+    >
+        <img
+            class="logo"
+            src="https://media.licdn.com/dms/image/v2/C4E0BAQEV2-azKAKM8A/company-logo_200_200/company-logo_200_200/0/1631302710298?e=2147483647&v=beta&t=ccVmkZ0L30rx7LW1ToeptORa-6Kqr5uZ39Y3Y8SlFBo"
+        />
+        <h1>Calendario de Audiencias</h1>
+    </div>
     <form id="schedule-form">
         <div class="calendar">
             {% for week_number, week_value in schedule.items() %}
                 {% for day in week_value %}
                     <div class="day">
                         {% if day.day %}
-                            <h3 id="{{day.day}}">{{day.data[0].weekday}} {{ day.day }}</h3>
+                            <h3 id="{{day.day}}">{{day.data[0].weekday[0:3]}} {{ day.day }} {{ day.data[0].month_name[0:3] }}</h3>
                             <table>
                                 <tbody>
                                     {% for hour in day.data %}
@@ -84,6 +151,7 @@
                                                     name="schedule[{{ day.day }}][{{ hour.time }}]" 
                                                     value="{{ hour.occupied }}" 
                                                     class="editable"
+                                                    {% if hour.occupied.strip() != '' %}disabled{% endif %}
                                                 >
                                             </td>
                                         </tr>
@@ -100,37 +168,6 @@
     </form>
 
     <script>
-
-function updateDayOfWeek(day, month, year = new Date().getFullYear(), elementId) {
-    /**
-     * Calcula el día de la semana para una fecha específica y actualiza el contenido de un elemento HTML.
-     *
-     * @param {number} day - Día del mes.
-     * @param {number} month - Mes del año (1-12).
-     * @param {number} year - Año (opcional, por defecto el actual).
-     * @param {string} elementId - ID del elemento HTML a actualizar.
-     */
-
-    // Crear un objeto Date con el día, mes y año proporcionados
-    const date = new Date(year, month - 1, day); // Meses en JavaScript son 0-indexados
-
-    // Array con los nombres de los días de la semana
-    const weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-
-    // Obtener el día de la semana como número (0 para Sunday, 6 para Saturday)
-    const dayOfWeek = date.getDay();
-
-    // Buscar el elemento por su ID
-    const element = document.getElementById(day);
-
-    // Actualizar el texto del elemento con el nombre del día de la semana
-    if (element) {
-        element.innerText = weekdays[dayOfWeek];
-    } else {
-        console.error(`Elemento con ID "${elementId}" no encontrado.`);
-    }
-}
-
         async function update(input, week_number, day, hour) {
             const {time} = hour;
             const value = input.value;
@@ -138,12 +175,13 @@ function updateDayOfWeek(day, month, year = new Date().getFullYear(), elementId)
 
             // Encuentra la celda anterior (la que contiene la hora)
             const timeCell = input.closest('tr').querySelector('.time-cell');
-            if (input.value.trim() !== "") {
-                // Si el valor no está vacío, agrega la clase 'highlight'
-                timeCell.classList.add('highlight');
+
+            // Deshabilita el input si tiene un valor no vacío
+            if (value.trim() !== "") {
+                input.disabled = true; // Deshabilitar el input
+                timeCell.classList.add('highlight'); // Agregar clase highlight
             } else {
-                // Si está vacío, elimina la clase 'highlight'
-                timeCell.classList.remove('highlight');
+                timeCell.classList.remove('highlight'); // Eliminar clase highlight
             }
 
             const data = {
