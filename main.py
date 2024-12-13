@@ -104,9 +104,26 @@ def schedule_updater():
         time.sleep(24 * 60 * 60)  # Esperar un día completo (24 horas)
         with lock:
             today = datetime.now()
-            new_schedule = create_monthly_schedule(today, days=30)
-            grouped_by_day = group_by_day(new_schedule)
-            schedule = group_by_week(grouped_by_day)
+            
+            # Filtrar días futuros
+            updated_schedule = {}
+            for week_number, days in schedule.items():
+                filtered_days = [
+                    entry for entry in days
+                    if datetime(entry["data"][0]["year"], entry["data"][0]["month"], entry["data"][0]["day"]) >= today
+                ]
+                if filtered_days:
+                    updated_schedule[week_number] = filtered_days
+
+            # Generar días nuevos hasta completar los 30 días
+            days_remaining = 30 - sum(len(days) for days in updated_schedule.values())
+            if days_remaining > 0:
+                new_schedule = create_monthly_schedule(today, days=days_remaining)
+                grouped_by_day = group_by_day(new_schedule)
+                new_weeks = group_by_week(grouped_by_day)
+                updated_schedule.update(new_weeks)
+
+            schedule = updated_schedule
 
 @app.on_event("startup")
 async def initialize_schedule():
