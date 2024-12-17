@@ -99,7 +99,6 @@ def schedule_updater():
     """
     Función en un hilo paralelo para actualizar el horario cada día.
     """
-    global schedule
     while True:
         time.sleep(24 * 60 * 60)  # Esperar un día completo (24 horas)
         with lock:
