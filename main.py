@@ -100,7 +100,10 @@ def schedule_updater():
     Función en un hilo paralelo para actualizar el horario cada día.
     """
     while True:
-        time.sleep(24 * 60 * 60)  # Esperar un día completo (24 horas)
+        time.sleep(60)# time.sleep(24 * 60 * 60)  # Esperar un día completo (24 horas)
+        print('\n Se inicia schedule_updater...\n')
+        print('\nschedule: ', schedule,'\n')
+        
         with lock:
             today = datetime.now()
             
@@ -121,7 +124,7 @@ def schedule_updater():
                 grouped_by_day = group_by_day(new_schedule)
                 new_weeks = group_by_week(grouped_by_day)
                 updated_schedule.update(new_weeks)
-
+            print('\updated_schedule: ', updated_schedule,'\n')
             schedule = updated_schedule
 
 @app.on_event("startup")
