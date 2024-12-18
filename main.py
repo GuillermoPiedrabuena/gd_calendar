@@ -124,7 +124,7 @@ def schedule_updater():
                 grouped_by_day = group_by_day(new_schedule)
                 new_weeks = group_by_week(grouped_by_day)
                 updated_schedule.update(new_weeks)
-            print('\updated_schedule: ', updated_schedule,'\n')
+            print('\n updated_schedule: ', updated_schedule,'\n')
             schedule = updated_schedule
 
 @app.on_event("startup")
