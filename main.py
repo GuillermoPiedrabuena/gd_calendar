@@ -7,6 +7,7 @@ from collections import defaultdict
 from fastapi.responses import JSONResponse
 import threading
 import time
+import pprint as pp
 
 app = FastAPI()
 
@@ -99,13 +100,12 @@ def schedule_updater():
     """
     Función en un hilo paralelo para actualizar el horario cada día.
     """
+    global schedule
     while True:
-        time.sleep(60)# time.sleep(24 * 60 * 60)  # Esperar un día completo (24 horas)
-        print('\n Se inicia schedule_updater...\n')
-        print('\nschedule: ', schedule,'\n')
+        time.sleep(24 * 60 * 60)  # Reemplazar con 24 * 60 * 60 para producción
         
         with lock:
-            today = datetime.now()
+            today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
             
             # Filtrar días futuros
             updated_schedule = {}
@@ -116,15 +116,22 @@ def schedule_updater():
                 ]
                 if filtered_days:
                     updated_schedule[week_number] = filtered_days
-
+            
             # Generar días nuevos hasta completar los 30 días
             days_remaining = 30 - sum(len(days) for days in updated_schedule.values())
             if days_remaining > 0:
                 new_schedule = create_monthly_schedule(today, days=days_remaining)
                 grouped_by_day = group_by_day(new_schedule)
                 new_weeks = group_by_week(grouped_by_day)
-                updated_schedule.update(new_weeks)
-            print('\n updated_schedule: ', updated_schedule,'\n')
+                
+                # Asegurarse de que las semanas nuevas se integren correctamente
+                for week, days in new_weeks.items():
+                    if week in updated_schedule:
+                        updated_schedule[week].extend(days)
+                    else:
+                        updated_schedule[week] = days
+            
+            # Actualizar la variable global `schedule` con la nueva estructura
             schedule = updated_schedule
 
 @app.on_event("startup")
@@ -136,7 +143,7 @@ async def initialize_schedule():
     today = datetime.now()
     monthly_schedule = create_monthly_schedule(today, days=30)
     grouped_by_day = group_by_day(monthly_schedule)
-    schedule = group_by_week(grouped_by_day)
+    schedule = group_by_week(grouped_by_day)  # Generar la estructura inicial
     
     # Lanzar el hilo para actualizar el horario
     updater_thread = threading.Thread(target=schedule_updater, daemon=True)
